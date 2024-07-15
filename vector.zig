@@ -14,19 +14,19 @@ pub fn Vector(comptime T: type) type {
         }
 
         pub fn push_back(vec: *Self, val: T) !void {
-            if (vec.m_buffer == null) {
+            if (vec.m_buffer.len == 0) {
                 vec.m_buffer = try allocator.alloc(T, 1);
                 vec.m_buffer[0] = val;
                 vec.m_len = 1;
             } else {
                 vec.m_buffer = try allocator.realloc(vec.m_buffer, vec.m_len + 1);
-                vec.m_bufferp[vec.m_len] = val;
+                vec.m_buffer[vec.m_len] = val;
                 vec.m_len += 1;
             }
         }
 
         pub fn push_back_obj(vec: *Self, val: *T) !void {
-            if (vec.m_buffer == null) {
+            if (vec.m_buffer.len == 0) {
                 vec.m_buffer = try allocator.alloc(T, 1);
                 vec.m_len = 1;
                 vec.m_buffer[0] = val.*;
