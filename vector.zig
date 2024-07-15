@@ -7,40 +7,41 @@ pub fn Vector(comptime T: type) type {
         const Self = @This();
         m_buffer: []T = &.{},
         m_len: usize = 0,
+        m_cap: usize = 0,
 
-        pub fn init(vec: *Self, len: usize) !void {
-            vec.m_buffer = try allocator.alloc(T, len);
-            vec.m_len = len;
+        pub fn init(vec: *Self, cap: usize) !void {
+            vec.m_buffer = try allocator.alloc(T, cap);
+            vec.m_cap = cap;
+        }
+
+        fn grow(vec: *Self) !void {
+            if (vec.m_cap > vec.m_len) return;
+
+            const new_capacity = @max(2 *| vec.m_buffer.len, 1);
+            const new_buffer = try allocator.alloc(T, new_capacity);
+            @memcpy(new_buffer[0..vec.m_len], vec.m_buffer);
+            allocator.free(vec.m_buffer);
+            vec.m_buffer = new_buffer;
+            vec.m_cap = new_capacity;
         }
 
         pub fn push_back(vec: *Self, val: T) !void {
-            if (vec.m_buffer.len == 0) {
-                vec.m_buffer = try allocator.alloc(T, 1);
-                vec.m_buffer[0] = val;
-                vec.m_len = 1;
-            } else {
-                vec.m_buffer = try allocator.realloc(vec.m_buffer, vec.m_len + 1);
-                vec.m_buffer[vec.m_len] = val;
-                vec.m_len += 1;
-            }
+            try vec.grow();
+            vec.m_buffer[vec.m_len] = val;
+            vec.m_len += 1;
         }
 
         pub fn push_back_obj(vec: *Self, val: *T) !void {
-            if (vec.m_buffer.len == 0) {
-                vec.m_buffer = try allocator.alloc(T, 1);
-                vec.m_len = 1;
-                vec.m_buffer[0] = val.*;
-            } else {
-                vec.m_buffer = try allocator.realloc(vec.m_buffer, vec.m_len + 1);
-                vec.m_buffer[vec.m_len] = val.*;
-                vec.m_len += 1;
-            }
+            try vec.grow();
+            vec.m_buffer[vec.m_len] = val.*;
+            vec.m_len += 1;
         }
 
         pub fn fill(vec: *Self, val: T) void {
             for (vec.m_buffer) |*element| {
                 element.* = val;
             }
+            vec.m_len = vec.m_cap;
         }
 
         pub fn begin(vec: *Self) *T {
@@ -59,35 +60,39 @@ pub fn Vector(comptime T: type) type {
             return vec.m_len;
         }
 
-        pub fn insert(vec: *Self, indx: usize, val: T) !void {
-            if (indx > vec.m_len) return error.IndexOutOfBounds;
-
-            var temp_vec = try allocator.alloc(T, vec.m_len + 1);
-            defer allocator.free(temp_vec);
-            @memcpy(temp_vec[0..indx], vec.m_buffer[0..indx]);
-            temp_vec[indx] = val;
-            @memcpy(temp_vec[indx + 1 ..], vec.m_buffer[indx..]);
-            //temp_vec = vec.m_buffer[0..indx];
-            //temp_vec[indx] = val;
-            //temp_vec[indx..] = vec.m_buffer[indx..];
-            //for (0..indx) |i| {
-            //    temp_vec[i] = vec.m_buffer[i];
-            //}
-            //temp_vec[indx] = val;
-            //for (indx..vec.m_len) |i| {
-            //    temp_vec[i + 1] = vec.m_buffer[i];
-            //}
-            vec.m_buffer = try allocator.realloc(vec.m_buffer, vec.m_len + 1);
-            vec.m_len += 1;
-
-            @memcpy(vec.m_buffer, temp_vec);
-            //for (0..vec.m_len) |i| {
-            //    vec.m_buffer[i] = temp_vec[i];
-            //}
-            //allocator.free(temp_vec);
+        pub fn get_cap(vec: *Self) usize {
+            return vec.m_cap;
         }
 
-        //pub fn insert_obj(vec: *Self, indx: usize, obj: *T) void {}
+        pub fn insert(vec: *Self, indx: usize, val: T) !void {
+            if (indx > vec.m_cap) return error.IndexOutOfBounds;
+
+            try vec.grow();
+
+            var i = vec.m_len;
+            while (i > indx) {
+                vec.m_buffer[i] = vec.m_buffer[i - 1];
+                i -= 1;
+            }
+
+            vec.m_buffer[indx] = val;
+            vec.m_len += 1;
+        }
+
+        pub fn insert_obj(vec: *Self, indx: usize, obj: *T) !void {
+            if (indx > vec.m_cap) return error.IndexOutOfBounds;
+
+            try vec.grow();
+
+            var i = vec.m_len;
+            while (i > indx) {
+                vec.m_buffer[i] = vec.m_buffer[i - 1];
+                i -= 1;
+            }
+
+            vec.m_buffer[indx] = obj.*;
+            vec.m_len += 1;
+        }
 
         pub fn pop(vec: *Self) T {
             if (vec.m_len > 0) {
@@ -127,7 +132,7 @@ pub fn Vector(comptime T: type) type {
         // FOR DEBUG PURPOSES
         pub fn print(vec: *Self) void {
             if (T == i32) {
-                for (vec.m_buffer) |e| {
+                for (vec.m_buffer[0..vec.m_len]) |e| {
                     std.debug.print("{} ", .{e});
                 }
                 std.debug.print("\n", .{});
